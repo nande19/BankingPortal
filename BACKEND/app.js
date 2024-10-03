@@ -33,7 +33,7 @@ const User = mongoose.model('User', UserSchema);
 // Register Route
 app.post('/register', [
     check('fullName', 'Full Name is required')
-        .notEmpty()
+        .notEmpty() 
         .matches(/^[a-zA-Z\s]+$/).withMessage('Full Name can only contain letters and spaces.'),
     check('lastName', 'Last Name is required')
         .notEmpty()
