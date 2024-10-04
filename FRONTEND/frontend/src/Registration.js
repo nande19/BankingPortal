@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom'; // Import Router and Routes
 import axios from 'axios';
@@ -23,7 +24,7 @@ function App() {
   const onSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:5000/register', formData);
+      const res = await axios.post('http://localhost:4000/register', formData);
       console.log(res.data);
     } catch (err) {
       console.error(err.response.data);

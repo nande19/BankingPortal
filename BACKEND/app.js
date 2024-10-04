@@ -1,90 +1,87 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const mongoose = require('mongoose');
-const helmet = require('helmet');
 const cors = require('cors');
-const { check, validationResult } = require('express-validator');
+const helmet = require('helmet');
+const mongoose = require('mongoose');
+const fs = require('fs');
+const https = require('https');
+require('dotenv').config();
+
+const authRoutes = require('./routes/auth');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(express.json());
-app.use(cors());
 app.use(helmet());
+//app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000', // Change to your frontend URL if needed
+  methods: ['GET', 'POST'],
+  credentials: true,
+}));
 
-// Database setup (replace with your MongoDB URI)
-mongoose.connect('mongodb://localhost/paymentPortal', { useNewUrlParser: true, useUnifiedTopology: true });
+app.use(express.json());
 
-// User Schema
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log('Connected to MongoDB');
+  })
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+  });
+
+// Routes
+app.use('/api/auth', authRoutes); // Define your authentication routes
+
+
+// SSL configuration
+const options = {
+  key: fs.readFileSync('./keys/privatekey.pem'),
+  cert: fs.readFileSync('./keys/certificate.pem'),
+};
+
+//const PORT = process.env.PORT || 443; 
+const PORT = process.env.PORT || 4000; // Change to 4000 for testing
+
+
+console.log(`Server is running on https://localhost:${PORT}`);
+
 const UserSchema = new mongoose.Schema({
-    fullName: String,
-    lastName: String,  // Added lastName field
-    emailAddress: String,  // Added emailAddress field
-    username: String,  // Added username field
-    idNumber: String,
-    accountNumber: String,
-    password: String
+  fullName: String,
+  lastName: String,
+  emailAddress: String,
+  username: String,
+  accountNumber: String,
+  idNumber: String,
+  password: String
 });
 
+// Create a model from the schema
 const User = mongoose.model('User', UserSchema);
 
-// Register Route
-app.post('/register', [
-    check('fullName', 'Full Name is required')
-        .notEmpty() 
-        .matches(/^[a-zA-Z\s]+$/).withMessage('Full Name can only contain letters and spaces.'),
-    check('lastName', 'Last Name is required')
-        .notEmpty()
-        .matches(/^[a-zA-Z\s]+$/).withMessage('Last Name can only contain letters and spaces.'),
-    check('emailAddress', 'Email Address is required').isEmail(),
-    check('username', 'Username is required')
-        .matches(/^[a-zA-Z0-9_]+$/).withMessage('Username can only contain letters, numbers, and underscores.'),
-    check('idNumber', 'ID Number should be numeric')
-        .isNumeric()
-        .isLength({ min: 10, max: 10 }).withMessage('ID Number must be 10 digits long.'),
-    check('accountNumber', 'Account Number should be numeric')
-        .isNumeric()
-        .isLength({ min: 10, max: 10 }).withMessage('Account Number must be 10 digits long.'),
-    check('password', 'Password must be at least 6 characters long').isLength({ min: 6 })
-], async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+app.post('/api/register', async (req, res) => {
+  const { fullName, lastName, emailAddress, username, accountNumber, idNumber, password } = req.body;
 
-    const { fullName, lastName, emailAddress, username, idNumber, accountNumber, password } = req.body;
+  // Create a new User instance
+  const newUser = new User({
+    fullName,
+    lastName,
+    emailAddress,
+    username,
+    accountNumber,
+    idNumber,
+    password
+  });
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Save user
-    const newUser = new User({ fullName, lastName, emailAddress, username, idNumber, accountNumber, password: hashedPassword });
-    await newUser.save();
-    res.status(201).json({ message: 'User registered successfully!' });
+  try {
+    // Save the user to the database
+    const savedUser = await newUser.save();
+    res.status(201).json({ message: 'User registered successfully', user: savedUser });
+  } catch (err) {
+    console.error('Error saving user:', err);
+    res.status(500).json({ message: 'Error registering user', error: err.message });
+  }
 });
 
-// Login Route
-app.post('/login', [
-    check('username', 'Username is required')
-        .notEmpty()
-        .matches(/^[a-zA-Z0-9_]+$/).withMessage('Username can only contain letters, numbers, and underscores.'),
-    check('password', 'Password is required').notEmpty()
-], async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-    const { username, password } = req.body;
-
-    // Find user by username
-    const user = await User.findOne({ username });
-    if (!user) return res.status(400).json({ message: 'Invalid username or password' });
-
-    // Check password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid username or password' });
-
-    // JWT Token
-    const token = jwt.sign({ id: user._id }, 'jwtSecret', { expiresIn: '1h' });
-    res.json({ token });
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
